@@ -39,17 +39,18 @@ use rustix_futex_sync::Mutex;
 #[cfg(not(any(feature = "origin-start", feature = "external-start")))]
 compile_error!("\"origin-program\" depends on either \"origin-start\" or \"external-start\".");
 
-/// The entrypoint where Rust code is first executed when the program starts.
+/// The entrypoint called by assembly. Responsible for performing relocations
+/// as necessary and calling [`start_rust`].
 ///
 /// # Safety
 ///
 /// `mem` must point to the stack as provided by the operating system.
+#[cfg(feature = "origin-start")]
 pub(super) unsafe extern "C" fn entry(mem: *mut usize) -> ! {
     // Do some basic precondition checks, to ensure that our assembly code did
     // what we expect it to do. These are debug-only, to keep the release-mode
     // startup code small and simple to disassemble and inspect.
     #[cfg(debug_assertions)]
-    #[cfg(feature = "origin-start")]
     {
         extern "C" {
             #[link_name = "llvm.frameaddress"]
@@ -82,6 +83,28 @@ pub(super) unsafe extern "C" fn entry(mem: *mut usize) -> ! {
         debug_assert_eq!(builtin_sponentry().addr() & 0xf, 0);
     }
 
+    // Before doing anything else, perform dynamic relocations.
+    #[cfg(feature = "experimental-relocate")]
+    #[cfg(relocation_model = "pic")]
+    {
+        let (_argc, _argv, envp) = compute_args(mem);
+        crate::relocate::relocate(envp);
+    }
+
+    start_rust(mem);
+}
+
+/// The entrypoint where runtime state is initialized, constructors are called
+/// and finally `origin_start` is executed. Equivalent to `__libc_start_main`
+/// in musl libc. Unlike glibc this requires relocations to have already been
+/// performed.
+///
+/// # Safety
+///
+/// `mem` must point to a stack with the contents that the OS would provide on
+/// the initial stack. Any necessary relocations for PIC executables must have
+/// been performed prior to calling this function.
+unsafe fn start_rust(mem: *mut usize) -> ! {
     // Compute `argc`, `argv`, and `envp`.
     let (argc, argv, envp) = compute_args(mem);
 
@@ -156,15 +179,18 @@ pub(super) unsafe extern "C" fn entry(mem: *mut usize) -> ! {
 }
 
 /// A program entry point similar to `_start`, but which is meant to be called
-/// by something else in the program rather than the OS.
+/// by something else in the program rather than the OS. Equivalent to
+/// `__libc_start_main` in musl libc. Unlike glibc this requires relocations to
+/// have already been performed.
 ///
 /// # Safety
 ///
-/// `mem` must point to a stack with the contents that the OS would provide
-/// on the initial stack.
+/// `mem` must point to a stack with the contents that the OS would provide on
+/// the initial stack. Any necessary relocations for PIC executables must have
+/// been performed prior to calling this function.
 #[cfg(feature = "external-start")]
 pub unsafe fn start(mem: *mut usize) -> ! {
-    entry(mem)
+    start_rust(mem)
 }
 
 /// Compute `argc`, `argv`, and `envp`.
