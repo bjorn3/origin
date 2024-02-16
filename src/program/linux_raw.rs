@@ -86,10 +86,19 @@ pub(super) unsafe extern "C" fn entry(mem: *mut usize) -> ! {
     let (argc, argv, envp) = compute_args(mem);
 
     // Before doing anything else, perform dynamic relocations.
-    #[cfg(all(feature = "experimental-relocate", feature = "origin-start"))]
+    #[cfg(feature = "experimental-relocate")]
     #[cfg(relocation_model = "pic")]
     {
-        crate::relocate::relocate(envp);
+        let offset = crate::relocate::relocate(envp);
+
+        // Initialize program state before running any user code.
+        init_runtime(mem, envp);
+
+        extern "C" {
+            fn __dls2(base: *mut u8, sp: *mut usize) -> !;
+        }
+
+        __dls2(core::ptr::without_provenance_mut(offset), mem);
     }
 
     // Initialize program state before running any user code.
@@ -206,8 +215,8 @@ unsafe fn init_runtime(mem: *mut usize, envp: *mut *mut u8) {
     thread::initialize_startup_info();
 
     // Initialize the main thread.
-    #[cfg(feature = "thread")]
-    thread::initialize_main(mem.cast());
+    //#[cfg(feature = "thread")]
+    //thread::initialize_main((argv.sub(1)).cast());
 }
 
 /// Functions registered with [`at_exit`].

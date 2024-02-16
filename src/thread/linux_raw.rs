@@ -12,7 +12,8 @@ use crate::arch::{
 };
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
-#[cfg(feature = "unstable-errno")]
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
 use core::cell::Cell;
 use core::cmp::max;
 use core::ffi::c_void;
@@ -20,7 +21,7 @@ use core::mem::{align_of, offset_of, size_of};
 use core::ptr::{copy_nonoverlapping, drop_in_place, null, null_mut, NonNull};
 use core::slice;
 use core::sync::atomic::Ordering::SeqCst;
-use core::sync::atomic::{AtomicI32, AtomicPtr, AtomicU32, AtomicU8};
+use core::sync::atomic::{AtomicI32, AtomicPtr, AtomicU32};
 use linux_raw_sys::elf::*;
 use rustix::io;
 use rustix::mm::{mmap_anonymous, mprotect, MapFlags, MprotectFlags, ProtFlags};
@@ -77,42 +78,41 @@ impl Thread {
 /// Data associated with a thread.
 ///
 /// This is not `repr(C)` and not ABI-exposed.
+#[repr(C)]
 struct ThreadData {
     thread_id: AtomicI32,
-    #[cfg(feature = "unstable-errno")]
     errno_val: Cell<i32>,
-    detached: AtomicU8,
+    detached: AtomicI32,
+    map_size: usize,
     stack_addr: *mut c_void,
     stack_size: usize,
     guard_size: usize,
-    map_size: usize,
     return_value: AtomicPtr<c_void>,
 
     // Support a few dtors before using dynamic allocation.
     #[cfg(feature = "alloc")]
-    dtors: smallvec::SmallVec<[Box<dyn FnOnce()>; 4]>,
+    dtors: Vec<Box<dyn FnOnce()>>,
 }
 
 // Values for `ThreadData::detached`.
-const INITIAL: u8 = 0;
-const DETACHED: u8 = 1;
-const ABANDONED: u8 = 2;
+const INITIAL: i32 = 0;
+const DETACHED: i32 = 1;
+const ABANDONED: i32 = 2;
 
 impl ThreadData {
     #[inline]
     fn new(stack_addr: *mut c_void, stack_size: usize, guard_size: usize, map_size: usize) -> Self {
         Self {
             thread_id: AtomicI32::new(0),
-            #[cfg(feature = "unstable-errno")]
             errno_val: Cell::new(0),
-            detached: AtomicU8::new(INITIAL),
+            detached: AtomicI32::new(INITIAL),
+            map_size,
             stack_addr,
             stack_size,
             guard_size,
-            map_size,
             return_value: AtomicPtr::new(null_mut()),
             #[cfg(feature = "alloc")]
-            dtors: smallvec::SmallVec::new(),
+            dtors: Vec::new(),
         }
     }
 }
