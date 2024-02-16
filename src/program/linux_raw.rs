@@ -9,7 +9,7 @@
 //! /// SAFETY: `argc`, `argv`, and `envp` describe incoming program
 //! /// command-line arguments and environment variables.
 //! #[no_mangle]
-//! unsafe fn origin_main(argc: usize, argv: *mut *mut u8, envp: *mut *mut u8) -> i32 {
+//! unsafe extern "C" fn origin_main(argc: i32, argv: *mut *mut u8, envp: *mut *mut u8) -> i32 {
 //!     todo!("Run the program and return the program exit status.")
 //! }
 //! ```
@@ -159,15 +159,15 @@ unsafe fn start_rust(mem: *mut usize) -> ! {
 
     {
         // Declare `origin_main` as documented in [`crate::program`].
-        extern "Rust" {
-            fn origin_main(argc: usize, argv: *mut *mut u8, envp: *mut *mut u8) -> i32;
+        extern "C" {
+            fn origin_main(argc: i32, argv: *mut *mut u8, envp: *mut *mut u8) -> i32;
         }
 
         #[cfg(feature = "log")]
         log::trace!("Calling `origin_main({:?}, {:?}, {:?})`", argc, argv, envp);
 
         // Call `origin_main`.
-        let status = origin_main(argc as usize, argv, envp);
+        let status = origin_main(argc, argv, envp);
 
         #[cfg(feature = "log")]
         log::trace!("`origin_main` returned `{:?}`", status);

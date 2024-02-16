@@ -36,7 +36,7 @@ enum Id {
 }
 
 #[no_mangle]
-unsafe fn origin_main(_argc: usize, _argv: *mut *mut u8, _envp: *mut *mut u8) -> i32 {
+unsafe extern "C" fn origin_main(_argc: i32, _argv: *mut *mut u8, _envp: *mut *mut u8) -> i32 {
     assert_eq!(thread::current_id(), thread::id(thread::current()).unwrap());
     program::at_exit(Box::new(|| {
         assert_eq!(thread::current_id(), thread::id(thread::current()).unwrap())

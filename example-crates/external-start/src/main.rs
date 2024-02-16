@@ -55,7 +55,7 @@ static EARLY_INIT_ARRAY: unsafe extern "C" fn(i32, *mut *mut u8) = {
 };
 
 #[no_mangle]
-unsafe fn origin_main(_argc: usize, _argv: *mut *mut u8, _envp: *mut *mut u8) -> i32 {
+unsafe extern "C" fn origin_main(_argc: i32, _argv: *mut *mut u8, _envp: *mut *mut u8) -> i32 {
     eprintln!("Hello from main thread");
 
     program::at_exit(Box::new(|| {

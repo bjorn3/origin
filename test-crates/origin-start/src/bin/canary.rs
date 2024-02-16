@@ -54,7 +54,7 @@ fn tls_guard() -> usize {
 }
 
 #[no_mangle]
-unsafe fn origin_main(_argc: usize, _argv: *mut *mut u8, _envp: *mut *mut u8) -> i32 {
+unsafe extern "C" fn origin_main(_argc: i32, _argv: *mut *mut u8, _envp: *mut *mut u8) -> i32 {
     assert_ne!(__stack_chk_guard, 0);
     assert_eq!(__stack_chk_guard, tls_guard());
 

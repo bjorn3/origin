@@ -32,7 +32,7 @@ extern "C" fn eh_personality() {}
 static GLOBAL_ALLOCATOR: rustix_dlmalloc::GlobalDlmalloc = rustix_dlmalloc::GlobalDlmalloc;
 
 #[no_mangle]
-unsafe fn origin_main(_argc: usize, _argv: *mut *mut u8, _envp: *mut *mut u8) -> i32 {
+unsafe extern "C" fn origin_main(_argc: i32, _argv: *mut *mut u8, _envp: *mut *mut u8) -> i32 {
     // Assert that the main thread initialized its TLS properly.
     check_eq(TEST_DATA.0);
 
