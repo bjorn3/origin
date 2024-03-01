@@ -83,15 +83,21 @@ pub(super) unsafe extern "C" fn entry(mem: *mut usize) -> ! {
         debug_assert_eq!(builtin_sponentry().addr() & 0xf, 0);
     }
 
+    let (argc, argv, envp) = compute_args(mem);
+
     // Before doing anything else, perform dynamic relocations.
     #[cfg(feature = "experimental-relocate")]
     #[cfg(relocation_model = "pic")]
     {
-        let (_argc, _argv, envp) = compute_args(mem);
         crate::relocate::relocate(envp);
     }
 
-    start_rust(mem);
+    // Declare `origin_main` as documented in [`crate::program`].
+    extern "C" {
+        fn origin_main(argc: i32, argv: *mut *mut u8, envp: *mut *mut u8) -> i32;
+    }
+
+    start_rust(origin_main, argc, argv, envp);
 }
 
 /// The entrypoint where runtime state is initialized, constructors are called
@@ -104,17 +110,12 @@ pub(super) unsafe extern "C" fn entry(mem: *mut usize) -> ! {
 /// `mem` must point to a stack with the contents that the OS would provide on
 /// the initial stack. Any necessary relocations for PIC executables must have
 /// been performed prior to calling this function.
-unsafe fn start_rust(mem: *mut usize) -> ! {
-    // Compute `argc`, `argv`, and `envp`.
-    let (argc, argv, envp) = compute_args(mem);
-
-    // Before doing anything else, perform dynamic relocations.
-    #[cfg(all(feature = "experimental-relocate", feature = "origin-start"))]
-    #[cfg(relocation_model = "pic")]
-    {
-        crate::relocate::relocate(envp);
-    }
-
+unsafe fn start_rust(
+    main: unsafe extern "C" fn(i32, *mut *mut u8, *mut *mut u8) -> i32,
+    argc: i32,
+    argv: *mut *mut u8,
+    envp: *mut *mut u8,
+) -> ! {
     // Initialize program state before running any user code.
     init_runtime(argv, envp);
 
@@ -158,16 +159,11 @@ unsafe fn start_rust(mem: *mut usize) -> ! {
     }
 
     {
-        // Declare `origin_main` as documented in [`crate::program`].
-        extern "C" {
-            fn origin_main(argc: i32, argv: *mut *mut u8, envp: *mut *mut u8) -> i32;
-        }
-
         #[cfg(feature = "log")]
-        log::trace!("Calling `origin_main({:?}, {:?}, {:?})`", argc, argv, envp);
+        log::trace!("Calling `{:p}({:?}, {:?}, {:?})`", main as *mut u8, argc, argv, envp);
 
         // Call `origin_main`.
-        let status = origin_main(argc, argv, envp);
+        let status = main(argc, argv, envp);
 
         #[cfg(feature = "log")]
         log::trace!("`origin_main` returned `{:?}`", status);
@@ -190,7 +186,15 @@ unsafe fn start_rust(mem: *mut usize) -> ! {
 /// been performed prior to calling this function.
 #[cfg(feature = "external-start")]
 pub unsafe fn start(mem: *mut usize) -> ! {
-    start_rust(mem)
+    // Declare `origin_main` as documented in [`crate::program`].
+    extern "C" {
+        fn origin_main(argc: i32, argv: *mut *mut u8, envp: *mut *mut u8) -> i32;
+    }
+
+    // Compute `argc`, `argv`, and `envp`.
+    let (argc, argv, envp) = compute_args(mem);
+
+    start_rust(origin_main, argc, argv, envp)
 }
 
 /// Compute `argc`, `argv`, and `envp`.
