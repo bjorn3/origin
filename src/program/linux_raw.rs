@@ -116,7 +116,7 @@ unsafe fn start_rust(mem: *mut usize) -> ! {
     }
 
     // Initialize program state before running any user code.
-    init_runtime(mem, envp);
+    init_runtime(argv, envp);
 
     // Call the functions registered via `.init_array`.
     #[cfg(feature = "init-array")]
@@ -221,7 +221,7 @@ unsafe fn compute_args(mem: *mut usize) -> (i32, *mut *mut u8, *mut *mut u8) {
 /// `mem` must point to the stack as provided by the operating system. `envp`
 /// must point to the incoming environment variables.
 #[allow(unused_variables)]
-unsafe fn init_runtime(mem: *mut usize, envp: *mut *mut u8) {
+unsafe fn init_runtime(argv: *mut *mut u8, envp: *mut *mut u8) {
     // Explicitly initialize `rustix`. This is needed for things like
     // `page_size()` to work.
     #[cfg(feature = "param")]
@@ -233,7 +233,7 @@ unsafe fn init_runtime(mem: *mut usize, envp: *mut *mut u8) {
 
     // Initialize the main thread.
     #[cfg(feature = "thread")]
-    thread::initialize_main(mem.cast());
+    thread::initialize_main((argv.sub(1)).cast());
 }
 
 /// Functions registered with [`at_exit`].
