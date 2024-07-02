@@ -1012,10 +1012,6 @@ pub fn errno_location() -> *mut i32 {
 #[inline]
 #[must_use]
 pub fn current_tls_addr(module: usize, offset: usize) -> *mut c_void {
-    // Offset 0 is the generation field, and we don't support dynamic linking,
-    // so we should only ever see 1 here.
-    assert_eq!(module, 1);
-
     unsafe {
         let dtv = (*current_metadata()).abi.dtv;
         let module_tls = *dtv.add(module);
