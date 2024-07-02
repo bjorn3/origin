@@ -156,7 +156,7 @@ struct Abi {
     /// The ABI-exposed `dtv` field (though we don't yet implement dynamic
     /// linking).
     #[cfg(any(target_arch = "aarch64", target_arch = "arm", target_arch = "riscv64"))]
-    dtv: *const c_void,
+    dtv: *const *mut c_void,
 
     /// The address the thread pointer points to.
     #[cfg(target_arch = "riscv64")]
@@ -179,7 +179,7 @@ struct Abi {
     /// The ABI-exposed `dtv` field (though we don't yet implement dynamic
     /// linking).
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    dtv: *const c_void,
+    dtv: *const *mut c_void,
 
     /// Padding to put the `canary` field at its well-known offset.
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -433,7 +433,10 @@ unsafe fn initialize_tls(
     metadata.write(Metadata {
         abi: Abi {
             canary,
-            dtv: null(),
+            dtv: Box::into_raw(Box::new([
+                null_mut(),
+                tls_data.byte_add(TLS_OFFSET).cast::<c_void>(),
+            ])) as *const *mut c_void,
             #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             this: newtls,
             _pad: Default::default(),
@@ -1013,25 +1016,10 @@ pub fn current_tls_addr(module: usize, offset: usize) -> *mut c_void {
     // so we should only ever see 1 here.
     assert_eq!(module, 1);
 
-    // Platforms where TLS data goes after the ABI-exposed fields.
-    #[cfg(any(target_arch = "aarch64", target_arch = "arm", target_arch = "riscv64"))]
-    {
-        thread_pointer()
-            .wrapping_byte_add(size_of::<Abi>() - offset_of!(Abi, thread_pointee))
-            .wrapping_byte_add(TLS_OFFSET)
-            .wrapping_byte_add(offset)
-    }
-
-    // Platforms where TLS data goes before the ABI-exposed fields.
-    //
-    // SAFETY: `STARTUP_TLS_INFO` has already been initialized by
-    // [`initialize_startup_info`].
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     unsafe {
-        thread_pointer()
-            .wrapping_byte_sub(STARTUP_TLS_INFO.mem_size)
-            .wrapping_byte_add(TLS_OFFSET)
-            .wrapping_byte_add(offset)
+        let dtv = (*current_metadata()).abi.dtv;
+        let module_tls = *dtv.add(module);
+        module_tls.byte_add(offset).cast::<c_void>()
     }
 }
 
