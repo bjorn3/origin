@@ -20,7 +20,7 @@ use core::ffi::c_void;
 use core::mem::{align_of, offset_of, size_of};
 use core::ptr::{copy_nonoverlapping, drop_in_place, null, null_mut, NonNull};
 use core::slice;
-use core::sync::atomic::Ordering::SeqCst;
+use core::sync::atomic::Ordering::{Relaxed, SeqCst};
 use core::sync::atomic::{AtomicI32, AtomicPtr, AtomicU32};
 use linux_raw_sys::elf::*;
 use rustix::io;
@@ -88,7 +88,6 @@ struct ThreadData {
     stack_size: usize,
     guard_size: usize,
     return_value: AtomicPtr<c_void>,
-
     // Support a few dtors before using dynamic allocation.
     //#[cfg(feature = "alloc")]
     //dtors: Vec<Box<dyn FnOnce()>>,
@@ -418,6 +417,8 @@ fn calculate_tls_size(map_size: &mut usize) -> (usize, usize) {
     (tls_data_bottom, header)
 }
 
+// FIXME compute metadata location ourself
+// FIXME move thread_id_ptr computation to caller
 unsafe fn initialize_tls(
     tls_data: *mut u8,
     metadata: *mut Metadata,
@@ -968,7 +969,14 @@ pub fn current_id() -> ThreadId {
     //
     // SAFETY: All threads have been initialized, including the main thread
     // with `initialize_main`, so `current()` returns a valid pointer.
-    let tid = unsafe { ThreadId::from_raw_unchecked(current().0.as_ref().thread_id.load(SeqCst)) };
+    let tid = unsafe {
+        let raw = current().0.as_ref().thread_id.load(SeqCst);
+        ThreadId::from_raw_unchecked(if raw == 0 {
+            gettid().as_raw_nonzero().get()
+        } else {
+            raw
+        })
+    };
     debug_assert_eq!(tid, gettid(), "`current_id` disagrees with `gettid`");
     tid
 }
@@ -1019,7 +1027,18 @@ pub fn current_tls_addr(module: usize, offset: usize) -> *mut c_void {
     unsafe {
         let dtv = (*current_metadata()).abi.dtv;
         let module_tls = *dtv.add(module);
-        module_tls.byte_add(offset).cast::<c_void>()
+        let res = module_tls.byte_add(offset).cast::<c_void>();
+        log::trace!(
+            "current_tls_addr({module}, {offset}) = {res:p} (tp={:p} thread_id={}, dtv={dtv:p})",
+            thread_pointer(),
+            (*current_metadata()).thread.thread_id.load(Relaxed),
+        );
+        if module == 0 || res.addr() < 0x10000 {
+            unsafe {
+                core::arch::asm!("ud2");
+            }
+        }
+        res
     }
 }
 
