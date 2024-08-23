@@ -238,6 +238,7 @@ pub(super) fn initialize_startup_info() {
     //
     // SAFETY: We're just taking the address of `_DYNAMIC` for arithmetic
     // purposes, not dereferencing it.
+    // FIXME use _DYNAMIC from the main executable
     let dynamic_addr: *const c_void = unsafe { &_DYNAMIC };
 
     // SAFETY: We assume that the phdr array pointer and length the kernel
@@ -256,7 +257,7 @@ pub(super) fn initialize_startup_info() {
                 // get a `PT_PHDR` or `PT_DYNAMIC` header, so use whichever one
                 // we get.
                 PT_PHDR => offset = first_phdr.addr().wrapping_sub(phdr.p_vaddr),
-                PT_DYNAMIC => offset = dynamic_addr.addr().wrapping_sub(phdr.p_vaddr),
+                //PT_DYNAMIC => offset = dynamic_addr.addr().wrapping_sub(phdr.p_vaddr),
 
                 PT_TLS => tls_phdr = phdr,
                 PT_GNU_STACK => stack_size = phdr.p_memsz,
@@ -423,7 +424,7 @@ unsafe fn new_tls(
         abi: Abi {
             canary,
             dtv: Box::into_raw(Box::new([
-                null_mut(),
+                core::ptr::without_provenance(1),
                 tls_data.byte_add(TLS_OFFSET).cast::<c_void>(),
             ])) as *const *mut c_void,
             #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
