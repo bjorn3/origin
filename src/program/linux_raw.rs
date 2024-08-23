@@ -217,6 +217,9 @@ unsafe fn init_runtime(mem: *mut usize, envp: *mut *mut u8) {
     // Initialize the main thread.
     //#[cfg(feature = "thread")]
     //thread::initialize_main((argv.sub(1)).cast());
+
+    #[cfg(feature = "atomic-dbg-logger")]
+    atomic_dbg::log::init();
 }
 
 /// Functions registered with [`at_exit`].
