@@ -90,8 +90,8 @@ struct ThreadData {
     return_value: AtomicPtr<c_void>,
 
     // Support a few dtors before using dynamic allocation.
-    #[cfg(feature = "alloc")]
-    dtors: Vec<Box<dyn FnOnce()>>,
+    //#[cfg(feature = "alloc")]
+    //dtors: Vec<Box<dyn FnOnce()>>,
 }
 
 // Values for `ThreadData::detached`.
@@ -111,8 +111,8 @@ impl ThreadData {
             stack_size,
             guard_size,
             return_value: AtomicPtr::new(null_mut()),
-            #[cfg(feature = "alloc")]
-            dtors: Vec::new(),
+            //#[cfg(feature = "alloc")]
+            //dtors: Vec::new(),
         }
     }
 }
@@ -684,8 +684,8 @@ unsafe fn exit(return_value: Option<NonNull<c_void>>) -> ! {
     }
 
     // Call functions registered with `at_exit`.
-    #[cfg(feature = "alloc")]
-    call_dtors(current);
+    //#[cfg(feature = "alloc")]
+    //call_dtors(current);
 
     // Read the thread's state, and set it to `ABANDONED` if it was `INITIAL`,
     // which tells `join_thread` to free the memory. Otherwise, it's in the
@@ -767,6 +767,7 @@ unsafe fn exit(return_value: Option<NonNull<c_void>>) -> ! {
 /// Call the destructors registered with [`at_exit`].
 #[cfg(feature = "alloc")]
 pub(crate) fn call_dtors(current: Thread) {
+    /*
     let mut current = current;
 
     // Run the `dtors`, in reverse order of registration. Note that destructors
@@ -785,6 +786,7 @@ pub(crate) fn call_dtors(current: Thread) {
 
         func();
     }
+    */
 }
 
 /// Marks a thread as “detached”.
@@ -927,11 +929,13 @@ unsafe fn free_memory(thread: Thread) {
 /// Registers a function to call when the current thread exits.
 #[cfg(feature = "alloc")]
 pub fn at_exit(func: Box<dyn FnOnce()>) {
+    /*
     // SAFETY: `current()` points to thread-local data which is valid as long
     // as the thread is alive.
     unsafe {
         current().0.as_mut().dtors.push(func);
     }
+    */
 }
 
 #[inline]
